@@ -1,0 +1,684 @@
+---
+description: Accessibility rules for WCAG 2.1 Level AA compliance, keyboard navigation, screen reader support, and inclusive design
+alwaysApply: false
+---
+# Accessibility Rules
+
+## 1. WCAG 2.1 Level AA Compliance
+
+### 1.1 Compliance Standards
+- **Target**: WCAG 2.1 Level AA compliance for ALL components and features
+- **Zero Violations**: Automated testing must show 0 accessibility violations
+- **Testing Required**: Both automated (jest-axe) and manual (keyboard, screen reader) testing
+- **Documentation**: Maintain `docs/ACCESSIBILITY.md` with current compliance status
+
+### 1.2 Critical Success Criteria
+- **1.1.1 Non-text Content**: All images, icons, and non-text content have text alternatives
+- **1.3.1 Info and Relationships**: Semantic HTML with proper landmarks and heading hierarchy
+- **1.4.3 Contrast (Minimum)**: 4.5:1 for normal text, 3:1 for large text and UI components
+- **2.1.1 Keyboard**: All functionality available via keyboard
+- **2.4.1 Bypass Blocks**: Skip links on all pages
+- **2.4.7 Focus Visible**: Visible focus indicators on all interactive elements
+- **4.1.2 Name, Role, Value**: All UI components have accessible names and proper ARIA attributes
+
+### 1.3 Compliance Verification
+```bash
+# Run automated accessibility tests
+npm test -- __tests__/accessibility/
+
+# Specific test suites
+npm test -- __tests__/accessibility/wcag-compliance.test.tsx
+npm test -- __tests__/accessibility/keyboard-navigation.test.tsx
+npm test -- __tests__/accessibility/screen-reader.test.tsx
+npm test -- __tests__/accessibility/color-contrast.test.tsx
+npm test -- __tests__/accessibility/touch-target.test.tsx
+```
+
+---
+
+## 2. Semantic HTML First Principle
+
+### 2.1 HTML-First Approach
+- **Always use semantic HTML first**: Only add ARIA when semantic HTML is insufficient
+- **Native elements preferred**: Use `<button>`, `<a>`, `<nav>`, `<main>`, `<header>`, `<footer>` over divs with roles
+- **Proper landmarks**: Every page must have semantic landmark elements
+
+### 2.2 Semantic Element Requirements
+
+**Landmarks**:
+```tsx
+<header>Site header</header>
+<nav>Navigation</nav>
+<main id="main-content">Main content</main>
+<footer>Site footer</footer>
+```
+
+**Heading Hierarchy**:
+- One `<h1>` per page (page title)
+- Headings must not skip levels (h1 → h2 → h3, never h1 → h3)
+- Use headings for structure, not styling
+
+**Form Elements**:
+```tsx
+<label htmlFor="goal-input">
+  Describe your goal
+</label>
+<input id="goal-input" type="text" />
+```
+
+### 2.3 When to Use ARIA
+- **Icon buttons without text**: Add `aria-label`
+- **Complex widgets**: Use appropriate ARIA roles (dialog, menu, tab)
+- **Dynamic content**: Use `aria-live` regions
+- **Additional context**: Use `aria-describedby` for help text
+- **State information**: Use `aria-expanded`, `aria-pressed`, `aria-selected`
+
+### 2.4 ARIA Anti-Patterns to Avoid
+- ❌ `<div role="button">` instead of `<button>`
+- ❌ `role="heading"` instead of `<h1>`, `<h2>`, etc.
+- ❌ Redundant ARIA: `<button role="button">`
+- ❌ `aria-label` on divs that should be semantic elements
+
+---
+
+## 3. Keyboard Navigation
+
+### 3.1 Keyboard Navigation Requirements
+- **Tab**: Navigate to next interactive element
+- **Shift+Tab**: Navigate to previous interactive element
+- **Enter**: Activate buttons, links, submit forms
+- **Space**: Activate buttons (when focused)
+- **Escape**: Close modals, drawers, cancel actions
+- **Arrow keys**: Navigate within menus, tabs, and complex widgets
+
+### 3.2 Tab Order
+- **Logical order**: Tab order must match visual layout
+- **Skip links first**: Skip link must be first focusable element
+- **No tabindex > 0**: Never use positive tabindex values
+- **tabindex="-1"**: Only for programmatic focus (e.g., main content landmark)
+
+**Example Tab Order**:
+1. Skip link
+2. Logo/home link
+3. Navigation items
+4. Main content interactive elements
+5. Footer links
+
+### 3.3 Keyboard Event Handlers
+
+**Form Submission**:
+```tsx
+const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    form.requestSubmit()
+  }
+}
+```
+
+**Button Activation** (native buttons handle this automatically):
+```tsx
+// Native buttons handle Space and Enter automatically
+<button onClick={handleClick}>Click me</button>
+```
+
+**Escape to Close**:
+```tsx
+const handleKeyDown = (event: React.KeyboardEvent) => {
+  if (event.key === 'Escape') {
+    closeModal()
+  }
+}
+```
+
+### 3.4 Focus Traps
+- **Modals/Drawers**: Trap focus within the modal when open
+- **Escape mechanism**: Always provide keyboard way to close
+- **Focus restoration**: Return focus to trigger element after closing
+- **Use utilities**: Leverage `lib/accessibility/focus-management.ts` for focus traps
+
+### 3.5 No Keyboard Traps
+- **Users must be able to navigate away** from all elements using standard keyboard navigation
+- **Test thoroughly**: Tab through entire page to verify no traps exist
+
+---
+
+## 4. Focus Management
+
+### 4.1 Focus Indicators
+- **Always visible**: Focus indicators must be visible on ALL interactive elements
+- **Sufficient contrast**: 3:1 contrast ratio minimum against background
+- **Implementation**: Use `:focus-visible` pseudo-class (not `:focus`)
+- **Styling**: 2px outline, 2px offset, matches primary color
+
+**Global Focus Styles** (already in `app/globals.css`):
+```css
+*:focus-visible {
+  outline-offset: 2px;
+}
+```
+
+**Component-Specific Focus** (Button component):
+```tsx
+focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900
+```
+
+### 4.2 Focus Management Utilities
+Location: `lib/accessibility/focus-management.ts`
+
+**Focus Element by Selector**:
+```tsx
+import { focusElement } from '@/lib/accessibility/focus-management'
+focusElement('#main-content')
+```
+
+**Create Focus Trap**:
+```tsx
+import { trapFocus } from '@/lib/accessibility/focus-management'
+const cleanup = trapFocus(modalRef)
+// Later: cleanup()
+```
+
+**Restore Focus**:
+```tsx
+import { restoreFocus } from '@/lib/accessibility/focus-management'
+const previousElement = document.activeElement
+// ...do something...
+restoreFocus(previousElement)
+```
+
+### 4.3 Programmatic Focus
+- **Page load**: Focus main content or first interactive element
+- **Route changes**: Focus page heading or main content after navigation
+- **Modal open**: Move focus to modal (first interactive element or close button)
+- **Modal close**: Restore focus to trigger element
+- **Error states**: Focus first error field or error summary
+
+---
+
+## 5. Screen Reader Support
+
+### 5.1 Accessible Names
+Every interactive element MUST have an accessible name via:
+1. **Text content**: `<button>Submit</button>`
+2. **aria-label**: `<button aria-label="Submit goal">...</button>`
+3. **aria-labelledby**: Reference to another element's ID
+4. **Label element**: `<label for="input-id">` for form fields
+
+### 5.2 ARIA Attributes
+
+**Required State Attributes**:
+```tsx
+// Form fields
+aria-required="true"
+aria-invalid="true"  // when validation fails
+aria-describedby="help-text-id"
+
+// Buttons
+aria-label="Close dialog"
+aria-pressed="true"  // for toggle buttons
+
+// Interactive components
+aria-expanded="false"  // for expandable sections
+aria-controls="panel-id"  // what element is controlled
+```
+
+### 5.3 Live Regions
+Use `LiveRegion` component for dynamic content announcements:
+
+**Component**: `components/accessibility/live-region.tsx`
+
+**Usage**:
+```tsx
+import { LiveRegion } from '@/components/accessibility/live-region'
+
+<LiveRegion 
+  message="Loading results..." 
+  politeness="polite" 
+/>
+```
+
+**Politeness Levels**:
+- `polite`: Announce when user is idle (default for most updates)
+- `assertive`: Announce immediately (errors, urgent updates)
+- `off`: Don't announce
+
+### 5.4 Visually Hidden Content
+Use `VisuallyHidden` component for screen reader-only content:
+
+**Component**: `components/accessibility/visually-hidden.tsx`
+
+**Usage**:
+```tsx
+import { VisuallyHidden } from '@/components/accessibility/visually-hidden'
+
+<VisuallyHidden>
+  <div id="goal-help-text">
+    Enter your business goal. Press Enter to submit, Shift+Enter for new line.
+  </div>
+</VisuallyHidden>
+```
+
+**Alternative** (for labels):
+```tsx
+<label htmlFor="input-id" className="sr-only">
+  Field description
+</label>
+```
+
+### 5.5 Skip Links
+**Required on every page**:
+```tsx
+import { SkipLink } from '@/components/accessibility/skip-link'
+
+<SkipLink href="#main-content">Skip to main content</SkipLink>
+```
+
+**Main content must have**:
+```tsx
+<main id="main-content" tabIndex={-1}>
+```
+
+### 5.6 Icon Accessibility
+**Icons with meaning**:
+```tsx
+<button aria-label="Search">
+  <SearchIcon className="size-4" aria-hidden="true" />
+</button>
+```
+
+**Decorative icons**:
+```tsx
+<span aria-hidden="true">
+  <Icon />
+</span>
+```
+
+---
+
+## 6. Color Contrast
+
+### 6.1 Contrast Requirements
+- **Normal text** (< 18pt): 4.5:1 minimum (Level AA)
+- **Large text** (≥ 18pt or ≥ 14pt bold): 3:1 minimum
+- **UI components**: 3:1 minimum (borders, focus indicators, icons)
+- **Focus indicators**: 3:1 minimum against adjacent colors
+
+### 6.2 Current Contrast Ratios
+**Light Mode** (documented in `docs/accessibility/COLOR-CONTRAST.md`):
+- Body text: 15.3:1 ✅ (exceeds 4.5:1)
+- Muted text: 4.6:1 ✅ (meets 4.5:1)
+- Focus indicators: 5.8:1 ✅ (exceeds 3:1)
+
+**Dark Mode**:
+- Body text: 15.3:1 ✅
+- Muted text: 5.8:1 ✅
+- Focus indicators: 4.6:1 ✅
+
+### 6.3 Testing Color Contrast
+**Automated Testing**:
+```tsx
+// __tests__/accessibility/color-contrast.test.tsx
+import { calculateContrastRatio } from '@/lib/accessibility/contrast'
+
+const ratio = calculateContrastRatio(foreground, background)
+expect(ratio).toBeGreaterThanOrEqual(4.5)
+```
+
+**Manual Verification**:
+- [WebAIM Contrast Checker](https://webaim.org/resources/contrastchecker/)
+- Browser DevTools contrast tools
+- axe DevTools browser extension
+
+### 6.4 Color Usage Rules
+- **Never use color alone** to convey information
+- **Supplement with text, icons, or patterns**: e.g., error states have red border AND error text
+- **Test in grayscale**: Ensure information is still accessible without color
+
+---
+
+## 7. Touch Target Sizing
+
+### 7.1 Minimum Sizes
+- **WCAG 2.5.5 (Level AAA)**: 44×44px minimum for touch targets
+- **WCAG 2.5.8 (Level AA - future)**: 24×24px minimum
+- **Best practice**: 44×44px for optimal mobile usability
+
+### 7.2 Implementation Technique
+**Visual size vs Touch area**:
+- Visual size can match Figma design (e.g., 36×36px button)
+- Touch area extended to 44×44px using padding/margin technique
+
+**Example** (from `components/forms/goal-input-form.tsx`):
+```tsx
+<Button
+  size="icon"  // 36×36px visual size
+  className="size-9 p-1 -m-1"  // 44×44px touch target
+>
+  <Icon className="size-4" />
+</Button>
+```
+
+**How it works**:
+- `size-9` = 36×36px base size
+- `p-1` = +4px padding all sides = 44×44px
+- `-m-1` = -4px margin all sides = visual size stays 36×36px
+
+### 7.3 Touch Target Testing
+**Automated**:
+```tsx
+// __tests__/accessibility/touch-target.test.tsx
+expect(button.className).toContain("p-1")
+expect(button.className).toContain("-m-1")
+```
+
+**Manual**:
+- Test on iOS Safari and Chrome Android
+- Use browser DevTools to visualize touch targets
+- Verify spacing between adjacent touch targets (8px minimum)
+
+---
+
+## 8. Motion and Animation
+
+### 8.1 Reduced Motion Support
+**Already implemented in `app/globals.css`**:
+```css
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+```
+
+### 8.2 Animation Guidelines
+- **Essential animations only**: Avoid decorative animations
+- **Short duration**: 150-300ms for most transitions
+- **Respect user preferences**: Always check `prefers-reduced-motion`
+- **Test without motion**: Ensure functionality works with reduced motion
+
+### 8.3 High Contrast Mode
+**Already implemented in `app/globals.css`**:
+```css
+@media (prefers-contrast: high) {
+  * {
+    border-width: 2px;
+  }
+  
+  *:focus-visible {
+    outline-width: 3px;
+  }
+}
+```
+
+---
+
+## 9. Forms and Validation
+
+### 9.1 Form Field Requirements
+- **Explicit labels**: Use `<label>` with `htmlFor` and `id` association
+- **Required fields**: Mark with `aria-required="true"` or `required` attribute
+- **Help text**: Associate with `aria-describedby`
+- **Error messages**: Associate with `aria-describedby` and `aria-invalid="true"`
+
+**Example**:
+```tsx
+<label htmlFor="email-input">
+  Email address
+</label>
+<input
+  id="email-input"
+  type="email"
+  aria-required="true"
+  aria-describedby="email-help email-error"
+  aria-invalid={hasError}
+/>
+<div id="email-help">Enter your email address</div>
+{hasError && (
+  <div id="email-error" role="alert">
+    Please enter a valid email address
+  </div>
+)}
+```
+
+### 9.2 Error Handling
+- **Announce errors**: Use `role="alert"` or live regions for dynamic errors
+- **Focus management**: Move focus to first error field or error summary
+- **Clear messaging**: Explain what went wrong and how to fix it
+- **Visible indicators**: Don't rely on color alone (use icons + text)
+
+### 9.3 Multi-line Input (Textarea)
+```tsx
+<textarea
+  id="goal-input"
+  aria-describedby="goal-help-text"
+  aria-required="true"
+  aria-multiline="true"
+/>
+```
+
+---
+
+## 10. Testing Strategy
+
+### 10.1 Automated Testing
+**Framework**: Jest + jest-axe + @axe-core/react
+
+**Test Files Location**: `__tests__/accessibility/`
+
+**Test Categories**:
+- `wcag-compliance.test.tsx`: Overall WCAG compliance checks
+- `keyboard-navigation.test.tsx`: Keyboard interaction tests
+- `screen-reader.test.tsx`: Screen reader compatibility
+- `color-contrast.test.tsx`: Color contrast verification
+- `touch-target.test.tsx`: Touch target sizing validation
+
+**Running Tests**:
+```bash
+npm test                                    # All tests
+npm test -- __tests__/accessibility/        # Accessibility tests only
+npm test -- --coverage                      # With coverage report
+```
+
+### 10.2 Manual Testing Procedures
+
+**Keyboard Navigation** (documented in `docs/accessibility/KEYBOARD-NAVIGATION.md`):
+1. Unplug mouse/trackpad
+2. Tab through all interactive elements
+3. Verify skip link appears on first Tab
+4. Test Enter/Space activation
+5. Verify no keyboard traps
+
+**Screen Reader Testing** (documented in `docs/accessibility/SCREEN-READER-TESTING.md`):
+1. Test with NVDA (Windows), VoiceOver (macOS), TalkBack (Android)
+2. Navigate by landmarks (D key in NVDA)
+3. Navigate by headings (H key)
+4. Verify form labels announced
+5. Test live region announcements
+
+**Visual Testing**:
+1. Zoom to 200% and verify no horizontal scrolling
+2. Test focus indicators visibility
+3. Verify color contrast meets standards
+4. Test all responsive breakpoints
+
+### 10.3 CI/CD Integration
+- Accessibility tests run on every commit
+- Zero violations required for build to pass
+- Linting includes accessibility rules (eslint-plugin-jsx-a11y)
+
+### 10.4 Browser Testing
+- **Desktop**: Chrome, Firefox, Safari, Edge
+- **Mobile**: iOS Safari, Chrome Android
+- **Screen Readers**: NVDA, JAWS (Windows), VoiceOver (macOS/iOS), TalkBack (Android)
+
+---
+
+## 11. Reusable Accessibility Components
+
+### 11.1 SkipLink
+**Location**: `components/accessibility/skip-link.tsx`  
+**Purpose**: Bypass navigation for keyboard users
+
+```tsx
+<SkipLink href="#main-content">Skip to main content</SkipLink>
+```
+
+### 11.2 VisuallyHidden
+**Location**: `components/accessibility/visually-hidden.tsx`  
+**Purpose**: Content visible to screen readers but hidden visually
+
+```tsx
+<VisuallyHidden>
+  Screen reader instructions
+</VisuallyHidden>
+```
+
+### 11.3 LiveRegion
+**Location**: `components/accessibility/live-region.tsx`  
+**Purpose**: Announce dynamic content changes
+
+```tsx
+<LiveRegion message="Loading..." politeness="polite" />
+```
+
+### 11.4 When to Use Each Component
+- **SkipLink**: Required on every page, first focusable element
+- **VisuallyHidden**: Help text, instructions, state information for screen readers
+- **LiveRegion**: Loading states, success/error messages, dynamic content updates
+
+---
+
+## 12. Accessibility Utilities
+
+### 12.1 Focus Management
+**Location**: `lib/accessibility/focus-management.ts`
+
+**Functions**:
+- `focusElement(selector: string)`: Focus element by CSS selector
+- `trapFocus(containerRef: RefObject<HTMLElement>)`: Create focus trap
+- `restoreFocus(element: HTMLElement | null)`: Restore focus to previous element
+
+### 12.2 ARIA Live Announcements
+**Location**: `lib/accessibility/aria-live.ts`
+
+**Functions**:
+- `announce(message: string, priority?: LiveRegionPriority)`: Announce to screen readers
+- `clearAnnouncements()`: Clear announcement container
+
+### 12.3 Keyboard Navigation
+**Location**: `lib/accessibility/keyboard-navigation.ts`
+
+**Functions**:
+- `handleEnterOrSpace(event: KeyboardEvent, callback: () => void)`: Handle Enter/Space key
+- `handleEscape(event: KeyboardEvent, callback: () => void)`: Handle Escape key
+
+### 12.4 Type Definitions
+**Location**: `lib/accessibility/types.ts`
+
+**Exports**: TypeScript types for accessibility utilities and testing
+
+---
+
+## 13. Best Practices Checklist
+
+### 13.1 Before Committing New Components
+- [ ] Semantic HTML used (not divs with roles)
+- [ ] All interactive elements keyboard accessible
+- [ ] Focus indicators visible on all interactive elements
+- [ ] Color contrast meets 4.5:1 (normal text) and 3:1 (UI components)
+- [ ] Touch targets meet 44×44px minimum
+- [ ] ARIA labels provided where needed
+- [ ] Screen reader tested (at minimum: VoiceOver or NVDA)
+- [ ] Automated tests pass (jest-axe shows 0 violations)
+- [ ] Skip link present on new pages
+- [ ] Heading hierarchy correct (no skipped levels)
+
+### 13.2 Code Review Checklist
+- [ ] No `<div>` or `<span>` with `role="button"` (use `<button>`)
+- [ ] Form fields have associated labels
+- [ ] Images have alt text (or alt="" for decorative)
+- [ ] No positive tabindex values
+- [ ] Focus indicators not removed via CSS
+- [ ] Color not used as only means of conveying information
+- [ ] Animations respect `prefers-reduced-motion`
+
+### 13.3 Common Accessibility Mistakes to Avoid
+- ❌ Missing alt text on images
+- ❌ Button made from div: `<div onClick={...}>`
+- ❌ Form inputs without labels
+- ❌ Insufficient color contrast
+- ❌ Removed focus indicators: `outline: none` without replacement
+- ❌ Keyboard traps in modals
+- ❌ Skip links missing
+- ❌ Heading levels skipped (h1 → h3)
+- ❌ Icon buttons without aria-label
+- ❌ Touch targets smaller than 44×44px on mobile
+
+---
+
+## 14. Documentation and Maintenance
+
+### 14.1 Documentation Requirements
+- **Main Guide**: `docs/ACCESSIBILITY.md` (overview and compliance status)
+- **Specific Guides**: `docs/accessibility/` directory
+  - `COLOR-CONTRAST.md`: Contrast ratios and analysis
+  - `KEYBOARD-NAVIGATION.md`: Keyboard navigation guide
+  - `SCREEN-READER-TESTING.md`: Screen reader testing procedures
+  - `WCAG-CHECKLIST.md`: Complete WCAG 2.1 checklist with status
+
+### 14.2 Updating Documentation
+When adding accessibility features:
+1. Update relevant documentation files
+2. Update `docs/ACCESSIBILITY.md` compliance status
+3. Add test coverage for new accessibility features
+4. Document any accepted deviations or enhancements
+
+### 14.3 Accessibility Regression Prevention
+- Run accessibility tests in CI/CD pipeline
+- Include accessibility in code reviews
+- Conduct periodic manual accessibility audits
+- Keep documentation current with implementation
+
+---
+
+## 15. Resources and References
+
+### 15.1 Standards and Guidelines
+- [WCAG 2.1 Quick Reference](https://www.w3.org/WAI/WCAG21/quickref/)
+- [WAI-ARIA Authoring Practices](https://www.w3.org/WAI/ARIA/apg/)
+- [MDN Accessibility](https://developer.mozilla.org/en-US/docs/Web/Accessibility)
+
+### 15.2 Testing Tools
+- [axe DevTools Browser Extension](https://www.deque.com/axe/devtools/)
+- [WebAIM Contrast Checker](https://webaim.org/resources/contrastchecker/)
+- [WAVE Browser Extension](https://wave.webaim.org/extension/)
+
+### 15.3 Screen Readers
+- [NVDA (Windows - Free)](https://www.nvaccess.org/)
+- [VoiceOver (macOS/iOS - Built-in)](https://www.apple.com/accessibility/voiceover/)
+- [JAWS (Windows - Commercial)](https://www.freedomscientific.com/products/software/jaws/)
+
+### 15.4 Internal Documentation
+- `docs/ACCESSIBILITY.md`: Main accessibility documentation
+- `docs/accessibility/`: Detailed accessibility guides
+- `lib/accessibility/`: Accessibility utilities and types
+- `components/accessibility/`: Reusable accessibility components
+
+---
+
+## 16. Support and Questions
+
+For accessibility questions or issues:
+1. Review this rules document and `docs/ACCESSIBILITY.md`
+2. Check WCAG 2.1 guidelines for specific requirements
+3. Run automated tests with jest-axe
+4. Perform manual keyboard and screen reader testing
+5. Consult with accessibility specialists for complex scenarios
+
+**Compliance Statement**: The Business Permitting Portal strives to meet WCAG 2.1 Level AA standards. All new features and components must maintain this standard.

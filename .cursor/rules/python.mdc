@@ -1,0 +1,782 @@
+---
+description: "Python Style Guide - Modern Best Practices (2025)"
+alwaysApply: false
+---
+# Python Development Style Guide (2025)
+
+This document defines the Python coding standards for this project, incorporating PEP 8, modern Python 3.11+ features, and industry best practices as of 2025.
+
+## Core Principles
+
+- **Explicit is better than implicit** - Be clear about intentions
+- **Readability counts** - Code is read more often than written
+- **Simple is better than complex** - Avoid over-engineering
+- **Practicality beats purity** - Pragmatic solutions over theoretical perfection
+
+## Code Style and Formatting
+
+### Indentation and Line Length
+
+- Use **4 spaces** per indentation level (never tabs)
+- Maximum line length: **88 characters** (Black formatter compatible)
+- For function calls/definitions, align continuation lines with opening delimiter
+- Break long lines at logical points (operators, commas)
+
+```python
+# Good
+result = some_function_that_takes_arguments(
+    arg1, arg2, arg3,
+    keyword_arg1=value1,
+    keyword_arg2=value2,
+)
+
+# Good - break before binary operator
+total = (
+    first_variable
+    + second_variable
+    - third_variable
+)
+```
+
+### Naming Conventions
+
+- **Files/Modules**: `snake_case.py` (e.g., `embedding_service.py`, `health.py`)
+- **Classes**: `PascalCase` (e.g., `EmbeddingService`, `VertexAIClient`)
+- **Functions/Methods**: `snake_case` (e.g., `get_embeddings`, `validate_input`)
+- **Variables**: `snake_case` (e.g., `api_key`, `batch_size`, `user_input`)
+- **Constants**: `UPPER_SNAKE_CASE` (e.g., `DEFAULT_BATCH_SIZE`, `MAX_RETRIES`)
+- **Private attributes/methods**: `_leading_underscore` (e.g., `_validate`, `_internal_state`)
+- **Internal/name-mangled**: `__double_leading_underscore` (use sparingly)
+
+### Import Organization
+
+Organize imports in three sections, separated by blank lines:
+
+```python
+# Standard library imports
+import json
+import logging
+import os
+from pathlib import Path
+from typing import Any, Optional
+
+# Third-party imports
+from fastapi import FastAPI, HTTPException, Depends
+from pydantic import BaseModel, Field, field_validator
+import httpx
+
+# Local application imports
+from app.config import settings
+from app.models.embedding import EmbeddingRequest, EmbeddingResponse
+from app.services.embedding_service import EmbeddingService
+```
+
+**Import Guidelines:**
+- Use absolute imports, avoid relative imports
+- Import specific names, avoid wildcard imports (`from module import *`)
+- One import per line for `import` statements
+- Group multiple items from same module on one line for `from` imports
+- Sort imports alphabetically within each section
+
+## Type Annotations (Modern Python 3.11+)
+
+### Use Built-in Generic Types (PEP 585)
+
+Python 3.11+ supports using built-in types directly for generics:
+
+```python
+# Modern (Python 3.11+) - PREFERRED
+def process_items(items: list[str]) -> dict[str, int]:
+    return {item: len(item) for item in items}
+
+def get_user(user_id: int) -> tuple[str, str] | None:
+    pass
+
+# Old style (avoid in Python 3.11+)
+from typing import List, Dict, Tuple, Optional
+def process_items(items: List[str]) -> Dict[str, int]:
+    pass
+```
+
+### Union Types with Pipe Operator (PEP 604)
+
+```python
+# Modern (Python 3.11+) - PREFERRED
+def fetch_data(source: str | Path) -> dict[str, Any] | None:
+    pass
+
+# Old style (avoid)
+from typing import Union, Optional
+def fetch_data(source: Union[str, Path]) -> Optional[Dict[str, Any]]:
+    pass
+```
+
+### Type Hints Best Practices
+
+- **Always use type hints** for function parameters and return values
+- Use `Any` sparingly - prefer specific types
+- Use `TypeAlias` for complex type definitions
+- Use `TypedDict` for structured dictionaries
+- Leverage `Protocol` for structural subtyping
+
+```python
+from typing import Any, Protocol, TypeAlias, TypedDict
+
+# Type alias for complex types
+EmbeddingVector: TypeAlias = list[float]
+Headers: TypeAlias = dict[str, str]
+
+# TypedDict for structured data
+class UserData(TypedDict):
+    user_id: int
+    username: str
+    email: str
+    is_active: bool
+
+# Protocol for structural typing
+class Embeddable(Protocol):
+    def get_embedding(self, text: str) -> list[float]:
+        ...
+```
+
+## FastAPI Development Patterns
+
+### Pydantic Models
+
+Use Pydantic v2+ features for data validation:
+
+```python
+from pydantic import BaseModel, Field, field_validator, ConfigDict
+
+class EmbeddingRequest(BaseModel):
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+    
+    text: str = Field(..., min_length=1, max_length=10000)
+    model: str = Field(default="text-embedding-004")
+    dimensions: int | None = Field(default=None, ge=1, le=2048)
+    
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Text cannot be empty")
+        return v
+```
+
+### Dependency Injection
+
+Use FastAPI's dependency injection system:
+
+```python
+from fastapi import Depends
+from typing import Annotated
+
+async def get_embedding_service() -> EmbeddingService:
+    return EmbeddingService()
+
+# Modern FastAPI pattern
+async def create_embedding(
+    request: EmbeddingRequest,
+    service: Annotated[EmbeddingService, Depends(get_embedding_service)],
+) -> EmbeddingResponse:
+    return await service.generate_embedding(request)
+```
+
+### Exception Handling
+
+Use FastAPI's HTTPException for API errors:
+
+```python
+from fastapi import HTTPException, status
+
+async def get_user(user_id: int) -> User:
+    user = await fetch_user(user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User {user_id} not found",
+        )
+    return user
+```
+
+## Async/Await Best Practices
+
+### Async Function Guidelines
+
+```python
+# Use async for I/O-bound operations
+async def fetch_data(url: str) -> dict[str, Any]:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        return response.json()
+
+# Don't use async for CPU-bound operations
+def process_data(data: list[int]) -> int:
+    return sum(x ** 2 for x in data)
+
+# Combine properly
+async def process_remote_data(url: str) -> int:
+    data = await fetch_data(url)
+    return process_data(data["values"])
+```
+
+### Context Managers
+
+Always use async context managers for async resources:
+
+```python
+# Good - async context manager
+async with httpx.AsyncClient() as client:
+    response = await client.get(url)
+
+# Good - multiple async context managers
+async with (
+    httpx.AsyncClient() as client,
+    aiofiles.open("data.json", "w") as f,
+):
+    response = await client.get(url)
+    await f.write(response.text)
+```
+
+## Error Handling and Logging
+
+### Exception Handling
+
+```python
+# Use specific exception types
+try:
+    data = await fetch_data(url)
+except httpx.HTTPStatusError as e:
+    logger.error(f"HTTP error occurred: {e.response.status_code}")
+    raise
+except httpx.RequestError as e:
+    logger.error(f"Network error occurred: {e}")
+    raise
+except Exception as e:
+    logger.exception("Unexpected error occurred")
+    raise
+
+# Avoid bare except clauses
+# BAD: except:
+# BAD: except Exception: (without re-raising in most cases)
+```
+
+### Logging Standards
+
+```python
+import logging
+from typing import Any
+
+logger = logging.getLogger(__name__)
+
+# Use appropriate log levels
+logger.debug("Detailed diagnostic information")
+logger.info("General informational message")
+logger.warning("Warning about potential issue")
+logger.error("Error occurred but handled")
+logger.critical("Critical failure requiring immediate attention")
+
+# Include context in log messages
+logger.info(
+    "Processing request",
+    extra={
+        "user_id": user_id,
+        "request_id": request_id,
+        "endpoint": "/api/embeddings",
+    },
+)
+
+# Use structured logging for production
+logger.error(
+    "Failed to generate embedding",
+    exc_info=True,  # Include stack trace
+    extra={"model": model_name, "text_length": len(text)},
+)
+```
+
+## Documentation Standards
+
+### Docstrings (Google Style)
+
+```python
+def generate_embedding(
+    text: str,
+    model: str = "text-embedding-004",
+    dimensions: int | None = None,
+) -> list[float]:
+    """Generate embedding vector for the provided text.
+    
+    This function uses the Vertex AI embedding service to generate
+    a numerical representation of the input text.
+    
+    Args:
+        text: The input text to embed. Must be non-empty.
+        model: The embedding model to use. Defaults to "text-embedding-004".
+        dimensions: Optional target dimensionality for the embedding.
+            If provided, must be between 1 and 2048.
+    
+    Returns:
+        A list of floats representing the embedding vector.
+    
+    Raises:
+        ValueError: If text is empty or dimensions are invalid.
+        HTTPException: If the embedding service request fails.
+    
+    Example:
+        >>> embedding = generate_embedding("Hello world")
+        >>> len(embedding)
+        768
+    """
+    pass
+```
+
+### Inline Comments
+
+```python
+# Use comments to explain WHY, not WHAT
+# Good
+# Cache results for 5 minutes to reduce API calls and improve response time
+cache_ttl = 300
+
+# Bad - comment just restates the code
+# Set cache TTL to 300
+cache_ttl = 300
+
+# Use TODO comments with context
+# TODO(username): Add retry logic with exponential backoff
+# TODO: Refactor to use async batch processing (Issue #123)
+```
+
+## Class Design Patterns
+
+### Dataclasses
+
+```python
+from dataclasses import dataclass, field
+from typing import Any
+
+@dataclass
+class EmbeddingMetadata:
+    """Metadata for embedding generation."""
+    model: str
+    dimensions: int
+    token_count: int
+    timestamp: str
+    additional_info: dict[str, Any] = field(default_factory=dict)
+    
+    def __post_init__(self) -> None:
+        """Validate data after initialization."""
+        if self.dimensions <= 0:
+            raise ValueError("Dimensions must be positive")
+```
+
+### Context Managers
+
+```python
+from contextlib import contextmanager, asynccontextmanager
+from typing import Iterator, AsyncIterator
+
+@contextmanager
+def database_session() -> Iterator[Session]:
+    """Context manager for database sessions."""
+    session = Session()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+@asynccontextmanager
+async def async_http_client() -> AsyncIterator[httpx.AsyncClient]:
+    """Context manager for async HTTP client."""
+    client = httpx.AsyncClient(timeout=30.0)
+    try:
+        yield client
+    finally:
+        await client.aclose()
+```
+
+## Testing Standards
+
+### Pytest Best Practices
+
+```python
+import pytest
+from typing import Any
+
+# Use descriptive test names
+def test_embedding_service_returns_correct_dimensions():
+    """Test that embedding service returns vectors of expected size."""
+    pass
+
+# Use fixtures for setup
+@pytest.fixture
+async def embedding_service() -> EmbeddingService:
+    """Provide embedding service instance for tests."""
+    service = EmbeddingService()
+    yield service
+    await service.cleanup()
+
+# Use parametrize for multiple test cases
+@pytest.mark.parametrize(
+    "input_text,expected_length",
+    [
+        ("short", 5),
+        ("longer text here", 16),
+        ("", 0),
+    ],
+)
+def test_text_processing(input_text: str, expected_length: int):
+    result = process_text(input_text)
+    assert len(result) == expected_length
+
+# Use async tests for async code
+@pytest.mark.asyncio
+async def test_async_embedding_generation():
+    service = EmbeddingService()
+    result = await service.generate("test text")
+    assert isinstance(result, list)
+    assert len(result) > 0
+
+# Use context managers for exception testing
+def test_invalid_input_raises_error():
+    with pytest.raises(ValueError, match="Text cannot be empty"):
+        validate_text("")
+```
+
+### Mock and Fixtures
+
+```python
+from unittest.mock import AsyncMock, MagicMock, patch
+import pytest
+
+@pytest.fixture
+def mock_vertex_ai_client():
+    """Mock Vertex AI client for testing."""
+    mock = MagicMock()
+    mock.get_embedding.return_value = [0.1] * 768
+    return mock
+
+@pytest.mark.asyncio
+async def test_with_mocked_api(mock_vertex_ai_client):
+    """Test service with mocked external API."""
+    with patch("app.services.embedding_service.VertexAIClient", return_value=mock_vertex_ai_client):
+        service = EmbeddingService()
+        result = await service.generate("test")
+        assert result == [0.1] * 768
+        mock_vertex_ai_client.get_embedding.assert_called_once()
+```
+
+## Configuration Management
+
+### Environment Variables
+
+```python
+import os
+from functools import lru_cache
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Settings(BaseSettings):
+    """Application settings loaded from environment."""
+    
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+    
+    # API Configuration
+    api_title: str = "BPP Embeddings API"
+    api_version: str = "1.0.0"
+    
+    # Service Configuration
+    google_ai_api_key: str = Field(..., alias="GOOGLE_AI_API_KEY")
+    vertex_ai_project: str = Field(..., alias="VERTEX_AI_PROJECT")
+    vertex_ai_location: str = Field(default="us-central1")
+    
+    # Feature Flags
+    enable_caching: bool = Field(default=True)
+    debug_mode: bool = Field(default=False)
+
+@lru_cache
+def get_settings() -> Settings:
+    """Get cached settings instance."""
+    return Settings()
+```
+
+## Security Best Practices
+
+### Input Validation
+
+```python
+from pydantic import BaseModel, Field, field_validator
+import re
+
+class UserInput(BaseModel):
+    """Validated user input."""
+    
+    email: str = Field(..., pattern=r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+    username: str = Field(..., min_length=3, max_length=50)
+    
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        """Validate username contains only allowed characters."""
+        if not re.match(r'^[a-zA-Z0-9_-]+$', v):
+            raise ValueError("Username contains invalid characters")
+        return v
+```
+
+### Secret Management
+
+```python
+from google.cloud import secretmanager
+from functools import lru_cache
+
+@lru_cache
+def get_secret(secret_id: str, project_id: str) -> str:
+    """Retrieve secret from Google Secret Manager.
+    
+    Secrets are cached to minimize API calls.
+    """
+    client = secretmanager.SecretManagerServiceClient()
+    name = f"projects/{project_id}/secrets/{secret_id}/versions/latest"
+    response = client.access_secret_version(request={"name": name})
+    return response.payload.data.decode("UTF-8")
+
+# Never log or expose secrets
+logger.info(f"Using API key: {'*' * 20}")  # Mask secrets in logs
+```
+
+## Performance Optimization
+
+### Caching
+
+```python
+from functools import lru_cache, cache
+from cachetools import TTLCache, cached
+from typing import Any
+
+# Simple LRU cache for pure functions
+@lru_cache(maxsize=128)
+def expensive_computation(x: int) -> int:
+    return x ** 2
+
+# No-limit cache (Python 3.9+)
+@cache
+def load_configuration() -> dict[str, Any]:
+    return json.loads(Path("config.json").read_text())
+
+# TTL cache for time-sensitive data
+embedding_cache: TTLCache = TTLCache(maxsize=100, ttl=300)
+
+@cached(cache=embedding_cache)
+async def get_embedding_with_cache(text: str) -> list[float]:
+    return await embedding_service.generate(text)
+```
+
+### Batch Processing
+
+```python
+async def process_batch(items: list[str], batch_size: int = 100) -> list[Any]:
+    """Process items in batches for better performance."""
+    results = []
+    for i in range(0, len(items), batch_size):
+        batch = items[i:i + batch_size]
+        batch_results = await process_items(batch)
+        results.extend(batch_results)
+    return results
+
+# Use asyncio.gather for concurrent operations
+async def fetch_multiple(urls: list[str]) -> list[dict[str, Any]]:
+    """Fetch multiple URLs concurrently."""
+    tasks = [fetch_data(url) for url in urls]
+    return await asyncio.gather(*tasks, return_exceptions=True)
+```
+
+## File Organization
+
+### Project Structure
+
+```
+project/
+├── app/
+│   ├── __init__.py
+│   ├── main.py              # FastAPI app entry point
+│   ├── config.py            # Configuration and settings
+│   ├── models/              # Pydantic models
+│   │   ├── __init__.py
+│   │   └── embedding.py
+│   ├── routers/             # API route handlers
+│   │   ├── __init__.py
+│   │   ├── embeddings.py
+│   │   └── health.py
+│   ├── services/            # Business logic
+│   │   ├── __init__.py
+│   │   └── embedding_service.py
+│   ├── utils/               # Utility functions
+│   │   ├── __init__.py
+│   │   └── logging.py
+│   └── exceptions/          # Custom exceptions
+│       ├── __init__.py
+│       └── embedding_exceptions.py
+├── tests/
+│   ├── unit/                # Unit tests
+│   ├── api/                 # API integration tests
+│   └── conftest.py          # Pytest configuration
+├── .env.example             # Example environment variables
+├── requirements.txt         # Production dependencies
+├── requirements-dev.txt     # Development dependencies
+├── Dockerfile
+├── docker-compose.yml
+└── README.md
+```
+
+## Common Patterns and Anti-Patterns
+
+### ✅ Do This
+
+```python
+# Use list comprehensions for simple transformations
+squared = [x ** 2 for x in numbers]
+
+# Use dict comprehensions
+name_to_age = {person.name: person.age for person in people}
+
+# Use generator expressions for large datasets
+total = sum(x ** 2 for x in large_list)
+
+# Use context managers for resource management
+with open("file.txt") as f:
+    data = f.read()
+
+# Chain string methods
+text = "  HELLO  ".strip().lower()
+
+# Use f-strings for formatting (Python 3.6+)
+message = f"User {user_id} has {count} items"
+
+# Use pathlib for file operations
+from pathlib import Path
+path = Path("data") / "file.txt"
+content = path.read_text()
+```
+
+### ❌ Don't Do This
+
+```python
+# Don't use mutable default arguments
+def bad_function(items=[]):  # BAD
+    items.append(1)
+    return items
+
+def good_function(items: list[int] | None = None) -> list[int]:  # GOOD
+    if items is None:
+        items = []
+    items.append(1)
+    return items
+
+# Don't compare boolean values explicitly
+if flag == True:  # BAD
+    pass
+if flag:  # GOOD
+    pass
+
+# Don't use string concatenation in loops
+result = ""
+for item in items:  # BAD
+    result += str(item)
+result = "".join(str(item) for item in items)  # GOOD
+
+# Don't catch and ignore exceptions without logging
+try:
+    risky_operation()
+except Exception:  # BAD
+    pass
+
+try:
+    risky_operation()
+except Exception as e:  # GOOD
+    logger.error(f"Operation failed: {e}", exc_info=True)
+    raise
+```
+
+## Dependency Management
+
+### Requirements Files
+
+```txt
+# requirements.txt - Production dependencies with pinned versions
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+httpx==0.25.2
+google-cloud-aiplatform==1.38.0
+google-cloud-secret-manager==2.16.4
+
+# requirements-dev.txt - Development dependencies
+-r requirements.txt
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+black==23.11.0
+ruff==0.1.6
+mypy==1.7.1
+```
+
+### Use Ruff for Linting (Modern Alternative to Flake8)
+
+```toml
+# pyproject.toml
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = ["E501"]  # Line too long (handled by formatter)
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+```
+
+---
+
+## Summary
+
+This style guide ensures:
+- ✅ Consistent, readable code across the project
+- ✅ Modern Python 3.11+ features and syntax
+- ✅ Type safety with comprehensive type hints
+- ✅ Robust error handling and logging
+- ✅ Secure credential management
+- ✅ Efficient async/await patterns
+- ✅ Comprehensive testing practices
+- ✅ Maintainable project structure
+
+For official Python style guidelines, refer to [PEP 8](https://peps.python.org/pep-0008/).

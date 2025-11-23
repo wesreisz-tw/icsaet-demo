@@ -1,0 +1,34 @@
+---
+description: Core cross language development rules
+alwaysApply: true
+---
+
+# STRICT RULES
+
+## CRITICAL PARTNER MINDSET
+
+Do not affirm my statements or assume my conclusions are correct. Question assumptions, offer counterpoints, test reasoning. Prioritize truth over agreement.
+
+## EXECUTION SEQUENCE (always reply with "Applying rules X,Y,Z")
+
+1. SEARCH FIRST - Use codebase_search/grep/web_search/MCP tools until finding similar functionality or confirming none exists. Investigate deeply, be 100% sure before implementing.
+2. REUSE FIRST - Check existing functions/patterns/structure. Extend before creating new. Strive to smallest possible code changes
+3. NO ASSUMPTIONS - Only use: files read, user messages, tool results. Missing info? Search then ask user.
+4. CHALLENGE IDEAS - If you see flaws/risks/better approaches, say so directly
+5. BE HONEST - State what's needed/problematic, don't sugarcoat to please
+
+## CODING STANDARDS
+
+- Plan before coding
+- No code comments - write self-explanatory code
+- Keep imports alphabetically sorted
+- Keep code SOLID but simple - separation of concerns without over-engineering  
+- Aim to keep files under 300 lines - split when it improves clarity
+- Write tests for critical paths only. Use AAA pattern with comments. Learn from examples
+- Test your tests and run npm run lint:ci for lint check
+- Use relative paths for internal documentation links (e.g., `docs/guide.md` not `/Users/...` or absolute URLs)
+
+## PROHIBITED ACTIONS
+
+- DO NOT WRITE DOCS UNLESS EXPLICITLY ASKED TO
+- NEVER run npm/yarn start commands - assume dev servers always running

@@ -1,0 +1,283 @@
+---
+description: Terraform coding standards and best practices for infrastructure as code
+globs: ["*.tf", "*.tfvars"]
+alwaysApply: false
+---
+
+# Terraform Coding Best Practices
+
+This document outlines the Terraform coding standards and best practices for the DCEO Business Portal Infrastructure as Code project.
+
+## Code Formatting and Style
+
+### 1. Consistent Formatting
+- **ALWAYS** run `terraform fmt` before committing code
+- Use 2 spaces for indentation (not tabs)
+- Maintain consistent line breaks and spacing
+- Keep line length under 120 characters where possible
+
+### 2. Naming Conventions
+- Use **lowercase** letters with **underscores** to separate words
+- Avoid repeating resource types in names (e.g., `web_server` not `web_server_instance`)
+- Use **singular nouns** for single resources, **plural** for lists/maps
+- Be descriptive but concise: `database_primary` not `db1`
+
+```hcl
+# Good
+resource "aws_instance" "web_server" {}
+variable "environment_name" {}
+output "vpc_id" {}
+
+# Bad  
+resource "aws_instance" "webServerInstance" {}
+variable "EnvName" {}
+output "VPC-ID" {}
+```
+
+## Code Organization and Structure
+
+### 3. File Organization
+```
+├── main.tf          # Primary resource definitions
+├── variables.tf     # Input variables
+├── outputs.tf       # Output values
+├── versions.tf      # Provider version constraints
+├── locals.tf        # Local values (optional)
+└── modules/         # Custom modules directory
+```
+
+### 4. Modular Architecture
+- Create **modules** for reusable infrastructure components
+- Each module should have a single, well-defined purpose
+- Follow the standard module structure (main.tf, variables.tf, outputs.tf)
+- Store modules in a dedicated `modules/` directory
+
+### 5. Resource Organization
+- Group related resources together
+- Use consistent ordering: data sources first, then resources
+- Separate complex resources into their own files when appropriate
+
+## Documentation Standards
+
+### 6. Variable Documentation
+- **REQUIRED**: Provide `description` for ALL variables
+- **REQUIRED**: Specify `type` constraints where applicable
+- **RECOMMENDED**: Include examples in descriptions for complex types
+
+```hcl
+variable "vpc_cidr" {
+  description = "CIDR block for the VPC. Example: 10.0.0.0/16"
+  type        = string
+  validation {
+    condition     = can(cidrhost(var.vpc_cidr, 0))
+    error_message = "VPC CIDR must be a valid IPv4 CIDR block."
+  }
+}
+```
+
+### 7. Output Documentation  
+- **REQUIRED**: Provide `description` for ALL outputs
+- Include the purpose and expected usage of the output
+
+```hcl
+output "vpc_id" {
+  description = "ID of the VPC for use in other modules or configurations"
+  value       = aws_vpc.main.id
+}
+```
+
+## Security and Configuration Management
+
+### 8. Sensitive Data Management
+- **NEVER** hardcode secrets, passwords, or API keys
+- Use environment variables, AWS Secrets Manager, or similar secure storage
+- Mark sensitive outputs appropriately
+
+```hcl
+output "database_password" {
+  description = "Database admin password"
+  value       = random_password.db_password.result
+  sensitive   = true
+}
+```
+
+### 9. Variable Usage
+- **AVOID** hardcoding values - use variables instead
+- Provide sensible defaults where appropriate
+- Use locals for computed or repeated values
+
+```hcl
+# Good
+locals {
+  common_tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    Owner       = var.owner
+  }
+}
+
+resource "aws_instance" "web" {
+  instance_type = var.instance_type
+  tags         = local.common_tags
+}
+
+# Bad
+resource "aws_instance" "web" {
+  instance_type = "t3.micro"
+  tags = {
+    Environment = "production"
+    Project     = "dceo-portal"
+  }
+}
+```
+
+## Resource Management
+
+### 10. Resource Tagging
+- **REQUIRED**: Implement consistent tagging strategy
+- Include minimum required tags: Environment, Project, Owner
+- Use locals for common tag sets to maintain consistency
+
+```hcl
+locals {
+  required_tags = {
+    Environment   = var.environment
+    Project       = "dceo-business-portal"
+    Owner         = var.owner
+    CreatedBy     = "terraform"
+    CreatedDate   = timestamp()
+  }
+}
+```
+
+### 11. Resource Lifecycle Management
+- Use `lifecycle` blocks appropriately to prevent accidental deletions
+- Implement `create_before_destroy` for resources that need zero-downtime updates
+- Use `ignore_changes` sparingly and document why
+
+```hcl
+resource "aws_instance" "web" {
+  # ... other configuration ...
+  
+  lifecycle {
+    create_before_destroy = true
+    ignore_changes       = [ami] # Managed by separate process
+  }
+}
+```
+
+## Validation and Testing
+
+### 12. Code Validation
+- **ALWAYS** run `terraform validate` before commits
+- Use `terraform plan` to review changes before applying
+- Implement custom validation rules for critical variables
+
+### 13. Version Constraints
+- **REQUIRED**: Pin provider versions in `versions.tf`
+- Use pessimistic version constraints (`~>`) for minor version flexibility
+- Document breaking changes when updating versions
+
+```hcl
+terraform {
+  required_version = ">= 1.0"
+  
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+```
+
+## State Management
+
+### 14. Remote State
+- **REQUIRED**: Use remote state backend (S3, GCS, etc.)
+- Enable state locking to prevent concurrent modifications
+- Use separate state files for different environments
+
+### 15. State Security
+- Encrypt state files at rest and in transit
+- Limit access to state files using IAM policies
+- Never commit state files to version control
+
+## Performance and Efficiency
+
+### 16. Resource Optimization
+- Use data sources to reference existing resources when possible
+- Avoid creating unnecessary resources
+- Implement resource sharing where appropriate (e.g., shared VPCs)
+
+### 17. Parallelism
+- Leverage Terraform's built-in parallelism
+- Use `depends_on` only when implicit dependencies aren't sufficient
+- Avoid unnecessary explicit dependencies
+
+## Error Handling and Debugging
+
+### 18. Error Prevention
+- Use validation blocks for input validation
+- Implement proper error messages for validation failures
+- Test configurations in non-production environments first
+
+### 19. Debugging Support
+- Use descriptive resource names for easier identification
+- Include helpful comments for complex logic
+- Use `terraform console` for testing expressions
+
+## Example Configuration
+
+```hcl
+# versions.tf
+terraform {
+  required_version = ">= 1.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+# variables.tf
+variable "environment" {
+  description = "Environment name (dev, staging, prod)"
+  type        = string
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "Environment must be dev, staging, or prod."
+  }
+}
+
+# locals.tf
+locals {
+  common_tags = {
+    Environment = var.environment
+    Project     = "dceo-business-portal"
+    ManagedBy   = "terraform"
+  }
+}
+
+# main.tf
+resource "aws_vpc" "main" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+  
+  tags = merge(local.common_tags, {
+    Name = "${var.environment}-vpc"
+  })
+}
+```
+
+## Enforcement
+
+These practices should be:
+1. **Validated** during code review
+2. **Automated** through CI/CD pipelines where possible  
+3. **Documented** in module README files
+4. **Tested** in non-production environments first
+
+Deviations from these practices must be documented and justified in pull requests.
