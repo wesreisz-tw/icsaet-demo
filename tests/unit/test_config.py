@@ -96,3 +96,4 @@ def test_invalid_email_format_rejected(monkeypatch):
     monkeypatch.setenv("USER_EMAIL", "invalid_email")
     with pytest.raises(ValidationError, match="valid email format"):
         Settings()
+

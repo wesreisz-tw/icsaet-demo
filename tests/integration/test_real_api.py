@@ -31,3 +31,4 @@ def test_query_against_real_api():
 
     print(f"\nReal API Response:\n{result}\n")
 
+

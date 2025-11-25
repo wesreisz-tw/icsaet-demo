@@ -4,7 +4,7 @@ MCP server for querying ICAET conference data.
 
 ## Overview
 
-This Model Context Protocol (MCP) server provides tools for querying the ICAET (International Conference on Software Engineering and Technology) conference data API.
+This Model Context Protocol (MCP) server provides tools for querying the ICSAET QCon London 2025 conference data API.
 
 ## Requirements
 
