@@ -3,26 +3,38 @@ requires = ["setuptools>=68.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "icsaet-demo"
+name = "icsaet-mcp"
 version = "0.1.0"
-description = "A minimal Python script project"
+description = "MCP server for querying ICAET conference data"
+keywords = ["mcp", "icaet", "conference", "query"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.13",
+]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "fastmcp>=0.1.0",
+    "httpx>=0.24.0",
+    "pydantic-settings>=2.0.0",
+]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4.3",
+    "pytest-asyncio>=0.21.0",
+    "respx>=0.20.0",
     "black>=23.11.0",
     "ruff>=0.1.6",
     "mypy>=1.7.1",
 ]
 
 [project.scripts]
-icsaet-demo = "icsaet_demo.main:main"
+icsaet-mcp = "icsaet_mcp.__main__:main"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["icsaet_demo*"]
+where = ["src"]
+include = ["icsaet_mcp*"]
 
 [tool.black]
 line-length = 88
@@ -36,6 +48,7 @@ target-version = "py313"
 python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
+plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,6 +1,10 @@
-# icsaet-demo
+# icsaet-mcp
 
-A minimal Python script project.
+MCP server for querying ICAET conference data.
+
+## Overview
+
+This Model Context Protocol (MCP) server provides tools for querying the ICAET (International Conference on Software Engineering and Technology) conference data API.
 
 ## Requirements
 
@@ -12,19 +16,35 @@ A minimal Python script project.
 pip install -e .
 ```
 
-## Usage
+## Configuration
 
-Run the command:
+This MCP server requires two environment variables to be configured in Cursor:
 
-```bash
-icsaet-demo
+- `ICAET_API_KEY` - Your API key for ICAET authentication (minimum 10 characters)
+- `USER_EMAIL` - Your email address for API requests (must be valid email format)
+
+### Cursor Setup
+
+1. Open Cursor Settings (Cmd+, on Mac or Ctrl+, on Windows/Linux)
+2. Navigate to the MCP section
+3. Add your MCP server configuration:
+
+```json
+{
+  "mcpServers": {
+    "icsaet": {
+      "command": "python",
+      "args": ["-m", "icsaet_mcp"],
+      "env": {
+        "ICAET_API_KEY": "your-actual-api-key-here",
+        "USER_EMAIL": "your-email@example.com"
+      }
+    }
+  }
+}
 ```
 
-Or run directly with Python:
-
-```bash
-python -m icsaet_demo.main
-```
+Replace `your-actual-api-key-here` and `your-email@example.com` with your actual credentials.
 
 ## Development
 
@@ -55,10 +75,9 @@ black .
 Type checking:
 
 ```bash
-mypy icsaet_demo
+mypy src/icsaet_mcp
 ```
 
 ## License
 
 MIT
-
