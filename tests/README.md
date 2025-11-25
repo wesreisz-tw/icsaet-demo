@@ -100,3 +100,4 @@ Tests run in CI with the following characteristics:
 - Real API tests are skipped (require credentials)
 - Coverage threshold: Critical paths covered (not 100%)
 
+

@@ -15,14 +15,14 @@ Need to implement the MCP `query` tool that integrates the ICAET API client with
 
 ## 2. Solution
 
-Create a fastmcp-decorated tool function in `tools.py` that accepts a question parameter, validates input, creates an ICAETClient instance, calls the API, and returns formatted responses with user-friendly error messages for any failures.
+Create a fastmcp-decorated tool function in `tools.py` that accepts a question parameter, validates input, creates an ICAETClient instance, calls the API, and returns formatted responses with user-friendly error messages for any failures. Use a helper function `query_icaet` to separate business logic from the MCP decorator for better testability.
 
 **Technical Rationale**:
 - Use fastmcp @mcp.tool() decorator for automatic MCP protocol integration
+- Create `query_icaet()` helper function for testability (can test without MCP decorator)
 - Delegate API communication to ICAETClient (separation of concerns)
 - Validate question parameter before making API calls
 - Convert exceptions to user-friendly messages (users see these in Cursor)
-- Keep tool function thin (business logic in ICAETClient)
 - Return string responses (compatible with MCP protocol)
 
 ---
@@ -31,12 +31,12 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
 
 ### Step 1: Import Required Dependencies
 **File**: `/Users/wesleyreisz/work/mcp/icsaet-demo/src/icsaet_mcp/tools.py`
-- Replace entire file content with:
+- Add imports:
   ```python
   """MCP tool definitions for ICAET queries."""
 
   import logging
-  from typing import Any
+  from typing import Any, cast
 
   import httpx
   from fastmcp import FastMCP
@@ -71,7 +71,7 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
           try:
               response = self._client.post("/query", json=payload, headers=headers)
               response.raise_for_status()
-              return response.json()
+              return cast(dict[str, Any], response.json())
           except httpx.TimeoutException as e:
               logger.error(f"Request timeout: {e}")
               raise RuntimeError(
@@ -98,14 +98,13 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
               ) from e
   ```
 
-### Step 3: Add Query Tool Function
+### Step 3: Add Query Helper Function
 **File**: `/Users/wesleyreisz/work/mcp/icsaet-demo/src/icsaet_mcp/tools.py`
-- After ICAETClient class, add:
+- After ICAETClient class, add helper function for testability:
   ```python
 
 
-  @mcp.tool()
-  def query(question: str) -> str:
+  def query_icaet(question: str) -> str:
       """Query the ICAET knowledge base.
 
       Args:
@@ -136,7 +135,7 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
           result = client.query(question.strip())
 
           if isinstance(result, dict) and "answer" in result:
-              return result["answer"]
+              return cast(str, result["answer"])
           elif isinstance(result, dict):
               return str(result)
           else:
@@ -151,16 +150,36 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
           ) from e
   ```
 
-### Step 4: Add Module Exports
+### Step 4: Add MCP Tool Decorator
+**File**: `/Users/wesleyreisz/work/mcp/icsaet-demo/src/icsaet_mcp/tools.py`
+- After query_icaet function, add the decorated tool that delegates to helper:
+  ```python
+
+
+  @mcp.tool()
+  def query(question: str) -> str:
+      """Query the ICAET knowledge base.
+
+      Args:
+          question: A natural language question about ICAET conference content,
+                   speakers, topics, or sessions.
+
+      Returns:
+          Answer from the ICAET knowledge base.
+      """
+      return query_icaet(question)
+  ```
+
+### Step 5: Add Module Exports
 **File**: `/Users/wesleyreisz/work/mcp/icsaet-demo/src/icsaet_mcp/tools.py`
 - At end of file, add:
   ```python
 
 
-  __all__ = ["mcp", "query", "ICAETClient"]
+  __all__ = ["mcp", "query", "query_icaet", "ICAETClient"]
   ```
 
-### Step 5: Create Test File
+### Step 6: Create Test File
 **File**: `/Users/wesleyreisz/work/mcp/icsaet-demo/tests/unit/test_tools.py`
 - Create new file with content:
   ```python
@@ -172,16 +191,17 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
   import pytest
   from pydantic import ValidationError
 
-  from icsaet_mcp.tools import ICAETClient, query
+  from icsaet_mcp.tools import ICAETClient, query_icaet
 
 
   def test_query_with_valid_question():
       """Arrange: Valid question and mocked successful API response
       Act: Call query tool
       Assert: Returns answer from API response"""
-      with patch("icsaet_mcp.tools.get_settings") as mock_settings, patch(
-          "httpx.Client"
-      ) as mock_client:
+      with (
+          patch("icsaet_mcp.tools.get_settings") as mock_settings,
+          patch("httpx.Client") as mock_client,
+      ):
           mock_settings.return_value = MagicMock(
               icaet_api_key="test-key",
               user_email="test@example.com",
@@ -190,7 +210,7 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
           mock_response.json.return_value = {"answer": "Test answer"}
           mock_client.return_value.post.return_value = mock_response
 
-          result = query("What did Leslie talk about?")
+          result = query_icaet("What did Leslie talk about?")
 
           assert result == "Test answer"
 
@@ -200,7 +220,7 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
       Act: Call query tool
       Assert: Raises ValueError with helpful message"""
       with pytest.raises(ValueError) as exc_info:
-          query("")
+          query_icaet("")
 
       assert "cannot be empty" in str(exc_info.value)
 
@@ -210,7 +230,7 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
       Act: Call query tool
       Assert: Raises ValueError"""
       with pytest.raises(ValueError) as exc_info:
-          query("   ")
+          query_icaet("   ")
 
       assert "cannot be empty" in str(exc_info.value)
 
@@ -225,7 +245,7 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
           )
 
           with pytest.raises(RuntimeError) as exc_info:
-              query("test question")
+              query_icaet("test question")
 
           assert "Missing configuration" in str(exc_info.value)
           assert "ICAET_API_KEY" in str(exc_info.value)
@@ -235,9 +255,10 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
       """Arrange: API call times out
       Act: Call query tool
       Assert: Raises RuntimeError with timeout message"""
-      with patch("icsaet_mcp.tools.get_settings") as mock_settings, patch(
-          "httpx.Client"
-      ) as mock_client:
+      with (
+          patch("icsaet_mcp.tools.get_settings") as mock_settings,
+          patch("httpx.Client") as mock_client,
+      ):
           mock_settings.return_value = MagicMock(
               icaet_api_key="test-key",
               user_email="test@example.com",
@@ -245,7 +266,7 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
           mock_client.return_value.post.side_effect = httpx.TimeoutException("Timeout")
 
           with pytest.raises(RuntimeError) as exc_info:
-              query("test question")
+              query_icaet("test question")
 
           assert "timed out" in str(exc_info.value).lower()
 
@@ -254,9 +275,10 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
       """Arrange: API returns 401 Unauthorized
       Act: Call query tool
       Assert: Raises RuntimeError with authentication message"""
-      with patch("icsaet_mcp.tools.get_settings") as mock_settings, patch(
-          "httpx.Client"
-      ) as mock_client:
+      with (
+          patch("icsaet_mcp.tools.get_settings") as mock_settings,
+          patch("httpx.Client") as mock_client,
+      ):
           mock_settings.return_value = MagicMock(
               icaet_api_key="invalid-key",
               user_email="test@example.com",
@@ -268,7 +290,7 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
           )
 
           with pytest.raises(RuntimeError) as exc_info:
-              query("test question")
+              query_icaet("test question")
 
           assert "Authentication failed" in str(exc_info.value)
 
@@ -281,12 +303,12 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
           icaet_api_key="test-key",
           user_email="test@example.com",
       )
-      
+
       with patch("httpx.Client") as mock_client:
           mock_response = MagicMock()
           mock_response.json.return_value = {"answer": "Test answer"}
           mock_client.return_value.post.return_value = mock_response
-          
+
           client = ICAETClient(settings)
           result = client.query("test question")
 
@@ -297,9 +319,10 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
       """Arrange: Question with leading/trailing whitespace
       Act: Call query tool
       Assert: Whitespace is stripped before API call"""
-      with patch("icsaet_mcp.tools.get_settings") as mock_settings, patch(
-          "httpx.Client"
-      ) as mock_client:
+      with (
+          patch("icsaet_mcp.tools.get_settings") as mock_settings,
+          patch("httpx.Client") as mock_client,
+      ):
           mock_settings.return_value = MagicMock(
               icaet_api_key="test-key",
               user_email="test@example.com",
@@ -308,33 +331,33 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
           mock_response.json.return_value = {"answer": "Test"}
           mock_client.return_value.post.return_value = mock_response
 
-          query("  test question  ")
+          query_icaet("  test question  ")
 
           call_args = mock_client.return_value.post.call_args.kwargs
           assert call_args["json"]["question"] == "test question"
   ```
 
-### Step 6: Run Tests
+### Step 7: Run Tests
 **Command**: `pytest tests/unit/test_tools.py -v`
 **Working Directory**: `/Users/wesleyreisz/work/mcp/icsaet-demo/`
 **Expected**: All tests pass
 
-### Step 7: Run Linter
+### Step 8: Run Linter
 **Command**: `ruff check src/icsaet_mcp/tools.py tests/unit/test_tools.py`
 **Working Directory**: `/Users/wesleyreisz/work/mcp/icsaet-demo/`
 **Expected**: Zero errors
 
-### Step 8: Run Formatter
+### Step 9: Run Formatter
 **Command**: `black --check src/icsaet_mcp/tools.py tests/unit/test_tools.py`
 **Working Directory**: `/Users/wesleyreisz/work/mcp/icsaet-demo/`
 **Expected**: No changes needed
 
-### Step 9: Run Type Checker
+### Step 10: Run Type Checker
 **Command**: `mypy src/icsaet_mcp/tools.py`
 **Working Directory**: `/Users/wesleyreisz/work/mcp/icsaet-demo/`
 **Expected**: Zero type errors
 
-### Step 10: Verify Tool Registration
+### Step 11: Verify Tool Registration
 **Command**: `python -c "from icsaet_mcp.tools import mcp; print(f'Tools registered: {len(mcp._tools)}')"`
 **Working Directory**: `/Users/wesleyreisz/work/mcp/icsaet-demo/`
 **Expected**: Prints "Tools registered: 1"
@@ -346,9 +369,16 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
 ### Tool Function Implementation
 - Function name is `query`
 - Decorated with `@mcp.tool()`
+- Delegates to `query_icaet()` helper function
 - Function signature: `(question: str) -> str`
 - Full type hints on parameters and return value
-- Comprehensive docstring with Args, Returns, Raises sections
+- Comprehensive docstring with Args, Returns sections
+
+### Helper Function Implementation
+- Function name is `query_icaet`
+- Contains all business logic for testability
+- Full type hints and docstring with Args, Returns, Raises
+- Same signature as decorated `query` function
 
 ### Parameter Validation
 - Rejects empty strings with ValueError
@@ -387,17 +417,18 @@ Create a fastmcp-decorated tool function in `tools.py` that accepts a question p
 :white_check_mark: 3. Create FastMCP instance named "icsaet"
 :white_check_mark: 4. Implement ICAETClient class with __init__ and query methods
 :white_check_mark: 5. Add comprehensive error handling in ICAETClient.query (timeout, HTTP errors, network errors)
-:white_check_mark: 6. Implement @mcp.tool() decorated query function
-:white_check_mark: 7. Add docstring to query function with Args, Returns, Raises
-:white_check_mark: 8. Add question validation (empty/whitespace check)
+:white_check_mark: 6. Implement query_icaet() helper function with full business logic
+:white_check_mark: 7. Add docstring to query_icaet function with Args, Returns, Raises
+:white_check_mark: 8. Add question validation (empty/whitespace check) in query_icaet
 :white_check_mark: 9. Add configuration validation (catch ValidationError from get_settings)
 :white_check_mark: 10. Add API call with error handling
 :white_check_mark: 11. Add response formatting (extract "answer" field)
-:white_check_mark: 12. Add __all__ exports
-:white_check_mark: 13. Create test_tools.py with 9 test cases
-:white_check_mark: 14. Run pytest and verify all tests pass
-:white_check_mark: 15. Run ruff and verify zero errors
-:white_check_mark: 16. Run black and verify no changes needed
-:white_check_mark: 17. Run mypy and verify zero type errors
-:white_check_mark: 18. Verify tool is registered with fastmcp
+:white_check_mark: 12. Implement @mcp.tool() decorated query function that delegates to query_icaet
+:white_check_mark: 13. Add __all__ exports (mcp, query, query_icaet, ICAETClient)
+:white_check_mark: 14. Create test_tools.py with 8 test cases using query_icaet
+:white_check_mark: 15. Run pytest and verify all tests pass
+:white_check_mark: 16. Run ruff and verify zero errors
+:white_check_mark: 17. Run black and verify no changes needed
+:white_check_mark: 18. Run mypy and verify zero type errors
+:white_check_mark: 19. Verify tool is registered with fastmcp
 
