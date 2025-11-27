@@ -226,9 +226,8 @@ RIPER-5 (Research, Innovate, Plan, Execute, Review, Fast) provides structured op
 ```
 do res          → AI reads and understands the codebase
 do inn          → Discuss possible approaches
-do pla          → Get detailed implementation checklist
-[approve plan]
-do exe          → AI implements exactly as planned
+do pla          → Decompose your specification & Get detailed implementation checklist for each task
+do exe          → AI implements exactly as planned for the task
 do rev          → Verify implementation matches plan
 ```
 
